@@ -19,6 +19,7 @@ def process_image(
     split: bool,
     line_color: str,
     line_width: int,
+    endpoints_only: bool = False,
 ) -> list:
     """处理单张图片，返回生成的输出文件列表。
 
@@ -46,7 +47,7 @@ def process_image(
     return [
         _draw_marked(
             image, source, base_output, rows, cols, x0, y0, x1, y1,
-            line_color, line_width,
+            line_color, line_width, endpoints_only,
         )
     ]
 
@@ -68,23 +69,49 @@ def _split_tiles(image, source, base_output, rows, cols, x0, y0, x1, y1):
     return outputs
 
 
+ENDPOINT_LEN = 3  # 只画端点时每端绘制的像素长度
+
+
+def _draw_line(draw, xa, ya, xb, yb, color, width, endpoints_only):
+    """绘制一条线；endpoints_only 时只在两端各画 ENDPOINT_LEN 像素。"""
+    if not endpoints_only:
+        draw.line((xa, ya, xb, yb), fill=color, width=width)
+        return
+    dx, dy = xb - xa, yb - ya
+    length = max(abs(dx), abs(dy))
+    if length <= ENDPOINT_LEN * 2:  # 线太短，端点会重叠，直接画整条
+        draw.line((xa, ya, xb, yb), fill=color, width=width)
+        return
+    step = ENDPOINT_LEN - 1  # 线段含起点，偏移 2 即覆盖 3 像素
+    ex = step if dx > 0 else -step if dx < 0 else 0
+    ey = step if dy > 0 else -step if dy < 0 else 0
+    draw.line((xa, ya, xa + ex, ya + ey), fill=color, width=width)
+    draw.line((xb - ex, yb - ey, xb, yb), fill=color, width=width)
+
+
 def _draw_marked(image, source, base_output, rows, cols, x0, y0, x1, y1,
-                 line_color, line_width):
+                 line_color, line_width, endpoints_only):
     """标线模式：保留原图，在 Margin 内容区域边缘和内部绘制网格线。"""
     marked = image.copy()
     draw = ImageDraw.Draw(marked)
     color = ImageColor.getcolor(line_color, "RGBA")
 
+    def line(xa, ya, xb, yb):
+        _draw_line(draw, xa, ya, xb, yb, color, line_width, endpoints_only)
+
     # 内容区域四边界线（Margin 不为 0 时也明确标出内容边界）
-    draw.rectangle((x0, y0, x1 - 1, y1 - 1), outline=color, width=line_width)
+    line(x0, y0, x1 - 1, y0)          # 上
+    line(x0, y1 - 1, x1 - 1, y1 - 1)  # 下
+    line(x0, y0, x0, y1 - 1)          # 左
+    line(x1 - 1, y0, x1 - 1, y1 - 1)  # 右
 
     for col in range(1, cols):
         x = x0 + round((x1 - x0) * col / cols)
-        draw.line((x, y0, x, y1 - 1), fill=color, width=line_width)
+        line(x, y0, x, y1 - 1)
 
     for row in range(1, rows):
         y = y0 + round((y1 - y0) * row / rows)
-        draw.line((x0, y, x1 - 1, y), fill=color, width=line_width)
+        line(x0, y, x1 - 1, y)
 
     base_output.mkdir(parents=True, exist_ok=True)
     output_path = base_output / f"{source.stem}_grid.png"

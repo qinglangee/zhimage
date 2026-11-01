@@ -88,8 +88,11 @@ class MainWindow(QMainWindow):
         self.color_button = QPushButton()
         self.update_color_button()
         self.color_button.clicked.connect(self.choose_color)
+        self.endpoints_check = QCheckBox("只画端点（3px）")
+        self.endpoints_check.setChecked(False)
         line_form.addRow("线宽：", self.line_width)
         line_form.addRow("颜色：", self.color_button)
+        line_form.addRow("", self.endpoints_check)
 
         output_box = QGroupBox("输出")
         output_layout = QVBoxLayout(output_box)
@@ -152,6 +155,7 @@ class MainWindow(QMainWindow):
             "margin_right": self.margin_right.value(),
             "line_width": self.line_width.value(),
             "line_color": self.line_color,
+            "endpoints_only": self.endpoints_check.isChecked(),
             "split": self.split_check.isChecked(),
             "output_dir": self.output_dir.text().strip(),
             "show_source": self.show_source_check.isChecked(),
@@ -171,6 +175,7 @@ class MainWindow(QMainWindow):
         self.line_width.setValue(settings.get("line_width", self.line_width.value()))
         self.line_color = settings.get("line_color", self.line_color)
         self.update_color_button()
+        self.endpoints_check.setChecked(bool(settings.get("endpoints_only", False)))
         self.split_check.setChecked(bool(settings.get("split", False)))
         self.output_dir.setText(settings.get("output_dir", ""))
         self.show_source_check.setChecked(bool(settings.get("show_source", True)))
@@ -292,6 +297,7 @@ class MainWindow(QMainWindow):
             split=self.split_check.isChecked(),
             line_color=self.line_color,
             line_width=self.line_width.value(),
+            endpoints_only=self.endpoints_check.isChecked(),
         )
 
     def process_images(self):
