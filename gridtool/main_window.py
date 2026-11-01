@@ -132,7 +132,7 @@ class MainWindow(QMainWindow):
         main.addLayout(action_row)
 
         splitter = QSplitter(Qt.Orientation.Horizontal)
-        self.source_preview = PreviewPanel("源图片")
+        self.source_preview = PreviewPanel("源图片", on_delete=self.remove_source)
         self.output_preview = PreviewPanel("输出图片")
         splitter.addWidget(self.source_preview)
         splitter.addWidget(self.output_preview)
@@ -254,6 +254,16 @@ class MainWindow(QMainWindow):
         self.source_preview.set_images([])
         self.output_preview.set_images([])
         self.statusBar().showMessage("已清空")
+
+    def remove_source(self, path: Path):
+        """从源文件列表删除单个文件。"""
+        self.source_files = [p for p in self.source_files if p != path]
+        if self.source_files:
+            self.files_label.setText(f"已选择 {len(self.source_files)} 张图片")
+        else:
+            self.files_label.setText("尚未选择图片")
+        self.update_source_preview()
+        self.statusBar().showMessage(f"已删除 {path.name}", 4000)
 
     def choose_output_dir(self):
         directory = QFileDialog.getExistingDirectory(self, "选择输出目录")

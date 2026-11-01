@@ -1,11 +1,13 @@
 # -*- coding: utf-8 -*-
 """拖拽区与多图预览面板。点击缩略图弹出单图查看窗口。"""
 
+import math
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSize, Signal
 from PySide6.QtWidgets import (
-    QWidget, QLabel, QVBoxLayout, QGridLayout, QScrollArea, QFrame,
+    QWidget, QLabel, QVBoxLayout, QHBoxLayout, QGridLayout, QScrollArea,
+    QFrame, QPushButton,
 )
 
 from .image_utils import load_pixmap
@@ -61,10 +63,15 @@ class ClickableLabel(QLabel):
 
 
 class PreviewPanel(QWidget):
-    """可滚动的多图片预览面板。点击缩略图弹出查看窗口。"""
+    """可滚动的多图片预览面板。点击缩略图弹出查看窗口。
 
-    def __init__(self, title):
+    on_delete 不为 None 时，每张卡片右上角显示删除按钮。
+    缩略图尺寸根据图片数量自适应，尽量让全部图片一屏显示。
+    """
+
+    def __init__(self, title, on_delete=None):
         super().__init__()
+        self.on_delete = on_delete
         outer = QVBoxLayout(self)
         outer.setContentsMargins(4, 4, 4, 4)
         self.heading = QLabel(title)
@@ -90,6 +97,7 @@ class PreviewPanel(QWidget):
     def set_images(self, entries):
         """
         entries: [(Path, optional description)]
+        根据数量自适应缩略图尺寸，尽量让全部图片一屏显示。
         """
         self.clear()
         if not entries:
@@ -98,25 +106,51 @@ class PreviewPanel(QWidget):
             self.grid.addWidget(empty, 0, 0)
             return
 
-        columns = 3
+        count = len(entries)
+        view_w = max(self.scroll.viewport().width(), 260)
+        view_h = max(self.scroll.viewport().height(), 200)
+        columns = max(1, min(count, view_w // 130))
+        rows = math.ceil(count / columns)
+        # 卡片高度 ≈ 缩略图 + 名称行 + 删除按钮行 + 边距，约 80px 附加
+        thumb_h = max(40, min(165, view_h // rows - 80))
+        thumb_w = max(60, min(230, round(thumb_h * 230 / 165)))
+
         for index, entry in enumerate(entries):
             path = entry[0]
             description = entry[1] if len(entry) > 1 else path.name
             self.grid.addWidget(
-                self._make_card(path, description),
+                self._make_card(path, description, thumb_w, thumb_h),
                 index // columns, index % columns,
             )
 
-    def _make_card(self, path: Path, description: str) -> QWidget:
+    def _make_card(self, path: Path, description: str,
+                   thumb_w: int, thumb_h: int) -> QWidget:
         card = QWidget()
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(5, 5, 5, 5)
         card_layout.setSpacing(4)
 
+        if self.on_delete:
+            top_row = QHBoxLayout()
+            top_row.setContentsMargins(0, 0, 0, 0)
+            top_row.addStretch(1)
+            del_btn = QPushButton("×")
+            del_btn.setFixedSize(22, 22)
+            del_btn.setToolTip("从列表中删除")
+            del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            del_btn.setStyleSheet(
+                "QPushButton { color: #c03030; font-weight: bold; border: none; }"
+                "QPushButton:hover { color: white; background: #c03030; border-radius: 4px; }"
+            )
+            del_btn.clicked.connect(
+                lambda checked=False, p=path: self.on_delete(p)
+            )
+            top_row.addWidget(del_btn)
+            card_layout.addLayout(top_row)
+
         image_label = ClickableLabel()
         image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        image_label.setMinimumSize(150, 115)
-        image_label.setMaximumSize(240, 180)
+        image_label.setFixedSize(thumb_w, thumb_h)
         image_label.setCursor(Qt.CursorShape.PointingHandCursor)
         image_label.setStyleSheet(
             "background: palette(base); border: 1px solid palette(mid);"
@@ -125,7 +159,7 @@ class PreviewPanel(QWidget):
             pixmap = load_pixmap(path)
             image_label.setPixmap(
                 pixmap.scaled(
-                    QSize(230, 165),
+                    QSize(thumb_w - 4, thumb_h - 4),
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
@@ -141,7 +175,7 @@ class PreviewPanel(QWidget):
         name_label.setWordWrap(True)
         name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_label.setToolTip(str(path))
-        name_label.setMaximumWidth(240)
+        name_label.setMaximumWidth(thumb_w + 10)
 
         card_layout.addWidget(image_label)
         card_layout.addWidget(name_label)
