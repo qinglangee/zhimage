@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 """拖拽区与多图预览面板。点击缩略图弹出单图查看窗口。"""
 
-import math
 from pathlib import Path
 
 from PySide6.QtCore import Qt, QSize, Signal
@@ -66,7 +65,6 @@ class PreviewPanel(QWidget):
     """可滚动的多图片预览面板。点击缩略图弹出查看窗口。
 
     on_delete 不为 None 时，每张卡片右上角显示删除按钮。
-    缩略图尺寸根据图片数量自适应，尽量让全部图片一屏显示。
     """
 
     def __init__(self, title, on_delete=None):
@@ -97,7 +95,7 @@ class PreviewPanel(QWidget):
     def set_images(self, entries):
         """
         entries: [(Path, optional description)]
-        根据数量自适应缩略图尺寸，尽量让全部图片一屏显示。
+        固定 3 列排列，每张图片完整缩放显示（不裁剪），超出可滚动。
         """
         self.clear()
         if not entries:
@@ -106,25 +104,16 @@ class PreviewPanel(QWidget):
             self.grid.addWidget(empty, 0, 0)
             return
 
-        count = len(entries)
-        view_w = max(self.scroll.viewport().width(), 260)
-        view_h = max(self.scroll.viewport().height(), 200)
-        columns = max(1, min(count, view_w // 130))
-        rows = math.ceil(count / columns)
-        # 卡片高度 ≈ 缩略图 + 名称行 + 删除按钮行 + 边距，约 80px 附加
-        thumb_h = max(40, min(165, view_h // rows - 80))
-        thumb_w = max(60, min(230, round(thumb_h * 230 / 165)))
-
+        columns = 3
         for index, entry in enumerate(entries):
             path = entry[0]
             description = entry[1] if len(entry) > 1 else path.name
             self.grid.addWidget(
-                self._make_card(path, description, thumb_w, thumb_h),
+                self._make_card(path, description),
                 index // columns, index % columns,
             )
 
-    def _make_card(self, path: Path, description: str,
-                   thumb_w: int, thumb_h: int) -> QWidget:
+    def _make_card(self, path: Path, description: str) -> QWidget:
         card = QWidget()
         card_layout = QVBoxLayout(card)
         card_layout.setContentsMargins(5, 5, 5, 5)
@@ -150,16 +139,19 @@ class PreviewPanel(QWidget):
 
         image_label = ClickableLabel()
         image_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        image_label.setFixedSize(thumb_w, thumb_h)
+        # 固定尺寸，必须不小于下方缩略图目标尺寸 230×165，
+        # 否则布局被挤压时 QLabel 会裁剪 pixmap（只显示一部分）
+        image_label.setFixedSize(240, 180)
         image_label.setCursor(Qt.CursorShape.PointingHandCursor)
         image_label.setStyleSheet(
             "background: palette(base); border: 1px solid palette(mid);"
         )
         try:
             pixmap = load_pixmap(path)
+            # 等比缩放到显示区域内，完整显示整张图片，不裁剪
             image_label.setPixmap(
                 pixmap.scaled(
-                    QSize(thumb_w - 4, thumb_h - 4),
+                    QSize(230, 165),
                     Qt.AspectRatioMode.KeepAspectRatio,
                     Qt.TransformationMode.SmoothTransformation,
                 )
@@ -175,7 +167,7 @@ class PreviewPanel(QWidget):
         name_label.setWordWrap(True)
         name_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         name_label.setToolTip(str(path))
-        name_label.setMaximumWidth(thumb_w + 10)
+        name_label.setMaximumWidth(240)
 
         card_layout.addWidget(image_label)
         card_layout.addWidget(name_label)
